@@ -2,7 +2,6 @@
 
 import binascii
 import dht
-import ntptime
 import json
 import machine
 import network
@@ -13,23 +12,28 @@ import umqtt.robust as mqtt
 from machine import RTC
 from machine import Timer
 
+import config
+
 
 rtc = RTC()
-dhtpin = machine.Pin(4)
+dhtpin = machine.Pin(config.dht_pin)
 dhtsensor = dht.DHT22(dhtpin)
 iface = network.WLAN(network.STA_IF)
+
+# use mac address for client id
 sensorid = binascii.hexlify(iface.config('mac')).decode()
-client = mqtt.MQTTClient(sensorid, '192.168.1.200')
+client = mqtt.MQTTClient(sensorid, config.mqtt_server)
 
 t_init = Timer(-1)
 t_sample = Timer(-1)
 
-ledpin = machine.Pin(2, machine.Pin.OUT)
+ledpin = machine.Pin(config.led_pin, machine.Pin.OUT)
 ledpin.on()
 
 
 def loop(timer):
     global lastdata
+    global count
 
     try:
         ledpin.off()
@@ -50,31 +54,35 @@ def loop(timer):
             print('ERROR: failed to measure temperature')
         else:
             lastdata = {
-                'location': 'office',
+                'location': config.location,
                 'sensorid': sensorid,
-                'ts': time.localtime(),
                 't': dhtsensor.temperature(),
                 'h': dhtsensor.humidity(),
             }
-            client.publish('sensor/office', json.dumps(lastdata))
+            client.publish(
+                'sensor/dht/{}/{}'.format(config.location, sensorid),
+                json.dumps(lastdata)
+            )
     finally:
         ledpin.on()
 
 
-def init(timer):
-    print('setting time')
-    ntptime.settime()
-
+def init():
     print('connecting')
     client.connect()
     print('connected')
 
     loop(None)
-    t_sample.init(period=30000, mode=Timer.PERIODIC, callback=loop)
+    t_sample.init(period=config.loop_interval,
+                  mode=Timer.PERIODIC, callback=loop)
 
 
 def stop():
     t_sample.deinit()
 
 
-t_init.init(period=5000, mode=Timer.ONE_SHOT, callback=init)
+print('waiting for connection')
+while not iface.isconnected():
+    time.sleep(1)
+
+init()
