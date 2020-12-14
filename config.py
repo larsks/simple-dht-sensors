@@ -5,7 +5,4 @@ led_pin = 2
 # 30 seconds
 loop_interval = 30000
 
-# 5 seconds
-init_wait = 5000
-
 location = 'office'

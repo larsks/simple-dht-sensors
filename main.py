@@ -9,13 +9,11 @@ import time
 
 import umqtt.robust as mqtt
 
-from machine import RTC
 from machine import Timer
 
 import config
 
 
-rtc = RTC()
 dhtpin = machine.Pin(config.dht_pin)
 dhtsensor = dht.DHT22(dhtpin)
 iface = network.WLAN(network.STA_IF)
@@ -33,7 +31,6 @@ ledpin.on()
 
 def loop(timer):
     global lastdata
-    global count
 
     try:
         ledpin.off()
@@ -51,7 +48,7 @@ def loop(timer):
                 else:
                     break
         except OSError:
-            print('ERROR: failed to measure temperature')
+            print('! failed to measure temperature')
         else:
             lastdata = {
                 'location': config.location,
@@ -68,21 +65,25 @@ def loop(timer):
 
 
 def init():
-    print('connecting')
+    print('waiting for wifi')
+    while not iface.isconnected():
+        machine.idle()
+    print('wifi connected')
+
+    print('connecting to mqtt server')
     client.connect()
     print('connected')
 
+    print('starting sensor loop')
     loop(None)
     t_sample.init(period=config.loop_interval,
                   mode=Timer.PERIODIC, callback=loop)
 
 
 def stop():
+    print('stopping sensor loop')
     t_sample.deinit()
+    print('stopped')
 
-
-print('waiting for connection')
-while not iface.isconnected():
-    time.sleep(1)
 
 init()
