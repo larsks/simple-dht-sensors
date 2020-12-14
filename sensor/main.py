@@ -33,7 +33,8 @@ def loop(timer):
     global lastdata
 
     try:
-        ledpin.off()
+        if config.blink_led:
+            ledpin.off()
 
         try:
             for i in range(2):
