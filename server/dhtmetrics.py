@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-import datetime
 import json
 import os
 import time
@@ -10,6 +9,7 @@ from logging.config import dictConfig
 from paho.mqtt import client as mqtt
 
 app = Flask(__name__)
+metric_lifetime = int(os.getenv('DHT_METRIC_LIFETIME', '600'))
 
 dictConfig({
     'version': 1,
@@ -31,13 +31,19 @@ class Receiver(mqtt.Client):
     def on_message(self, client, userdata, msg):
         app.logger.debug('received %s message: %s', msg.topic, msg.payload)
         data = json.loads(msg.payload)
+        data['ts'] = time.time()
         self.latest[data['sensorid']] = data
 
 
 @app.route('/metrics')
 def publish_metrics():
     buf = []
+    now = time.time()
+
     for sensor, data in app.metrics.latest.items():
+        if now - data['ts'] > metric_lifetime:
+            continue
+
         buf.append(f'temperature{{location="{data["location"]}", sensorid="{data["sensorid"]}"}} {data["t"]}')
         buf.append(f'humidity{{location="{data["location"]}", sensorid="{data["sensorid"]}"}} {data["h"]}')
 
