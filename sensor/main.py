@@ -13,8 +13,7 @@ from machine import Timer
 
 import config
 
-
-dhtpin = machine.Pin(config.dht_pin)
+dhtpin = machine.Pin(4)
 dhtsensor = dht.DHT22(dhtpin)
 iface = network.WLAN(network.STA_IF)
 
@@ -22,14 +21,21 @@ iface = network.WLAN(network.STA_IF)
 sensorid = binascii.hexlify(iface.config('mac')).decode()
 client = mqtt.MQTTClient(sensorid, config.mqtt_server)
 
-t_init = Timer(-1)
-t_sample = Timer(-1)
-
-ledpin = machine.Pin(config.led_pin, machine.Pin.OUT)
+ledpin = machine.Pin(2, machine.Pin.OUT)
 ledpin.on()
 
 
-def loop(timer):
+def deepsleep(duration):
+    assert duration > 0
+
+    rtc = machine.RTC()
+    rtc.irq(trigger=rtc.ALARM0, wake=machine.DEEPSLEEP)
+    rtc.alarm(rtc.ALARM0, duration)
+    print('sleeping for {} ms'.format(duration))
+    machine.deepsleep()
+
+
+def measure():
     global lastdata
 
     try:
@@ -65,26 +71,30 @@ def loop(timer):
         ledpin.on()
 
 
-def init():
+def wait_for_connection():
     print('waiting for wifi')
     while not iface.isconnected():
         machine.idle()
     print('wifi connected')
 
+
+def run():
+    t_start = time.ticks_ms()
+
+    wait_for_connection()
+
     print('connecting to mqtt server')
     client.connect()
     print('connected')
 
-    print('starting sensor loop')
-    loop(None)
-    t_sample.init(period=config.loop_interval,
-                  mode=Timer.PERIODIC, callback=loop)
+    measure()
+    print('wait 5 seconds before sleeping')
+    time.sleep(5)
+
+    t_end = time.ticks_ms()
+    t_delta = time.ticks_diff(t_end, t_start)
+    print('start', t_start, 'end', t_end, 'delta', t_delta)
+    deepsleep(config.measure_interval - time.ticks_diff(t_end, t_start))
 
 
-def stop():
-    print('stopping sensor loop')
-    t_sample.deinit()
-    print('stopped')
-
-
-init()
+run()
